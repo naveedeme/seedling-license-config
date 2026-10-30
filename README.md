@@ -4,7 +4,7 @@ This public repository contains **routing metadata only**. It does not hold lice
 
 `notes-pro.json` is a signed envelope. `payload` is base64url of UTF-8 JSON containing `app`, `revision`, `endpoint`, `issuedAt`, and `expiresAt`. `signature` is an ECDSA P-256/SHA-256 signature over the **decoded payload bytes**. The corresponding public key is embedded in the Notes Pro pilot app. GitHub hosts the file but cannot authorize different endpoints without the private signing key.
 
-Initial Notes Pro route is `https://seedlingappstudio.pages.dev/notes-pro/`, a **public website test URL, not a licensing Worker**. The app's debug-only diagnostics launcher can fetch and validate configuration, check endpoint reachability, and demonstrate routing migration. The production Notes Pro experience is unchanged.
+Notes Pro started with **revision 1** pointing to `https://seedlingappstudio.pages.dev/notes-pro/`. The current **revision 2** points to `https://raw.githubusercontent.com/naveedeme/seedling-license-config/main/pilot-health.json`, a harmless GitHub-hosted health response used to demonstrate migration between hosts. Neither address is a license-verification Worker. The debug-only diagnostics launcher fetches and validates the signed config; the production Notes Pro experience is unchanged.
 
 ## Publish a new route
 
