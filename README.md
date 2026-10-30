@@ -2,7 +2,7 @@
 
 This **public repository contains routing metadata only**, not licenses, entitlement checks, application secrets, Google credentials, or private signing keys. The private `notes-pro` Android repository remains private.
 
-Current published configuration: **revision 3**, primary route `https://seedlingappstudio.pages.dev/notes-pro/`. This is a harmless website/test endpoint — **NOT** a license server. Revision 1 established the route; revision 2 switched to GitHub to prove migration; revision 3 restored the original route. The separate Notes Pro debug launcher successfully discovered these changes without reinstalling the app.
+Current published configuration: **revision 4**, primary route `https://seedlingappstudio.pages.dev/notes-pro/`, standby route `https://raw.githubusercontent.com/naveedeme/seedling-license-config/main/pilot-health.json`. These are harmless website/test endpoints — **NOT** license servers. Revision 1 established the route; revision 2 switched to GitHub to prove migration; revision 3 restored the original route. Revision 4 adds a signed standby target for testing failover. The separate Notes Pro debug launcher discovered the first three revisions without reinstalling the app; revision 4 still needs an on-device test.
 
 ## Signature format and security model
 
