@@ -1,23 +1,69 @@
-# Seedling Endpoint Discovery — Notes Pro pilot
+# Seedling endpoint discovery — Notes Pro safety pilot
 
-This public repository contains **routing metadata only**. It does not hold license entitlements, private keys, Google credentials, or any license-verification code.
+This **public repository contains routing metadata only**, not licenses, entitlement checks, application secrets, Google credentials, or private signing keys. The private `notes-pro` Android repository remains private.
 
-`notes-pro.json` is a signed envelope. `payload` is base64url of UTF-8 JSON containing `app`, `revision`, `endpoint`, `issuedAt`, and `expiresAt`. `signature` is an ECDSA P-256/SHA-256 signature over the **decoded payload bytes**. The corresponding public key is embedded in the Notes Pro pilot app. GitHub hosts the file but cannot authorize different endpoints without the private signing key.
+Current published configuration: **revision 3**, primary route `https://seedlingappstudio.pages.dev/notes-pro/`. This is a harmless website/test endpoint — **NOT** a license server. Revision 1 established the route; revision 2 switched to GitHub to prove migration; revision 3 restored the original route. The separate Notes Pro debug launcher successfully discovered these changes without reinstalling the app.
 
-Notes Pro started with **revision 1** pointing to `https://seedlingappstudio.pages.dev/notes-pro/`. **Revision 2** switched to `https://raw.githubusercontent.com/naveedeme/seedling-license-config/main/pilot-health.json` to test account-independent routing. The current signed **revision 3** restores `https://seedlingappstudio.pages.dev/notes-pro/`. These are website/test endpoints, not licensing Workers. The debug-only diagnostics launcher fetches and validates the signed configuration; the production Notes Pro experience is unchanged.
+## Signature format and security model
 
-## Publish a new route
+- Format 1: base64url `payload` (UTF-8 JSON) and ECDSA P-256/SHA-256 `signature` made by the existing, pinned root key.
+- Payload includes `app`, `endpoint`, `revision`, `issuedAt`, and `expiresAt`, plus optional `fallbackEndpoints` (up to three other trusted HTTPS addresses).
+- Every candidate URL is **inside the signed payload**. GitHub, CDN mirrors, and a modified JSON file cannot authorize another endpoint on their own.
+- Format 2: endpoint payload signed by a delegated P-256 signing key with `keyId`; `delegation` includes a certificate signed by the original trusted root, scoped to `notes-pro` with issue/expiry dates.
+- A delegated signing key **cannot authorize another signing key**; new delegates must be explicitly approved by the offline root.
+- The app remembers the highest accepted revision, rechecks cached signatures at startup, rejects expired routing configurations and downgrades, and uses the bundled fallback if no trusted configuration remains.
+- Primary network source: `https://raw.githubusercontent.com/naveedeme/seedling-license-config/main/notes-pro.json`. Secondary source: `https://cdn.jsdelivr.net/gh/naveedeme/seedling-license-config@main/notes-pro.json`. This is a CDN mirror of the *same GitHub origin*, not an independently controlled backup. CDN caches can be stale; clients reject lower revisions.
+- Debug-only simulated primary failure demonstrates candidate routing. Future license implementations must fail over **only** for temporary transport errors, HTTP 429, or 5xx. Never retry a denied license on another server after a definitive 4xx result.
 
-Keep the pilot private key **outside GitHub** and back it up securely. On your computer:
+## Publish format-1 revision 4 with a safe standby
+
+The enhanced debug build supports standby candidates. For test purposes use these values while retaining the current primary route:
 
 ```bash
 python -m pip install cryptography
-python scripts/sign_notes_pro.py --key /secure/location/pilot-routing-signing-private.pem --revision 2 --endpoint https://seedlingappstudio.pages.dev/
-git add notes-pro.json && git commit -m "Pilot: switch Notes Pro route" && git push
+python scripts/sign_notes_pro.py \
+  --key /secure/location/pilot-routing-signing-private.pem \
+  --revision 4 \
+  --endpoint https://seedlingappstudio.pages.dev/notes-pro/ \
+  --fallback-endpoint https://raw.githubusercontent.com/naveedeme/seedling-license-config/main/pilot-health.json
+git diff -- notes-pro.json
+git add notes-pro.json
+git commit -m "Notes Pro: signed revision 4 with standby route"
+git push
 ```
 
-Install Notes Pro's debug APK, open **Notes Pro · Endpoint Test**, and tap **Fetch signed configuration** to see the new verified endpoint. Revisions must increase: clients reject lower revisions after accepting a newer one. Avoid signing an incorrect URL, because rollback protection means fixing it requires a *higher* revision. If GitHub is down, the app retains the last valid signed route, or falls back to its bundled default on a first run. This demo does not prevent use of notes.
+**Keep the root PEM outside this repository** (including commit history and GitHub Actions logs) and back it up securely. Check the `--revision` value against the current published revision before each release. Clients will reject a lower number. If you publish a bad endpoint, fix it by publishing a *higher* signed revision.
 
-Current URL: `https://raw.githubusercontent.com/naveedeme/seedling-license-config/main/notes-pro.json`
+## Future delegated-key rotation
 
-The route-signing key is for this pilot, **not** a Google Play license key. Before production licensing, review key custody and rotation, backend entitlement checks, license grace periods, and whether GitHub raw hosting is appropriate for your traffic.
+Keep the existing **format 1** public feed as long as old installed APKs require it. Format-1-only clients cannot parse format 2, so publishing format 2 prematurely would strand them on their last cached route or the built-in fallback.
+
+After compatible app versions are distributed, authorize a shorter-lived delegate with the root key:
+
+```bash
+# Generate and secure the new delegate private key OFF the repository.
+openssl ecparam -name prime256v1 -genkey -noout -out /secure/location/notespro-delegate.pem
+openssl pkey -in /secure/location/notespro-delegate.pem -pubout -out /secure/location/notespro-delegate-public.pem
+
+python scripts/issue_notes_pro_delegation.py \
+  --root-key /secure/location/pilot-routing-signing-private.pem \
+  --delegate-public /secure/location/notespro-delegate-public.pem \
+  --key-id notespro-2027-q1 --days 90 \
+  --output /secure/location/notespro-delegation.json
+
+python scripts/sign_notes_pro.py \
+  --key /secure/location/notespro-delegate.pem \
+  --delegation /secure/location/notespro-delegation.json \
+  --revision 5 --expires 2027-01-15 \
+  --endpoint https://seedlingappstudio.pages.dev/notes-pro/
+```
+
+Choose an expiry within the delegated certificate's validity. A delegated certificate is public data; **neither private key is**. Retiring a compromised root or breaking compatibility with older format-1 builds requires an app-update and support plan. A signed configuration is not a substitute for server-side license checks.
+
+## Testing and rollout
+
+Build the Notes Pro feature branch `feature/signed-endpoint-discovery-pilot` and run its unit tests; the enhanced *Notes Pro · Endpoint Test* debug launcher shows current revision, source, expiry, candidate routes, and retry status. With revision 4 published, switch on **Simulate primary outage**, then run **Check endpoint and failover**. The test should reach `pilot-health.json` with HTTP 200. Toggle airplane mode, force a fetch, and verify the cached signed route remains available.
+
+The release build does not show the test launcher or enable paid-license enforcement. No other Seedling applications have been modified.
+
+Limitations before using this system for real premium licensing: Google Play entitlement verification must remain server-side; a signed configuration does not authenticate a customer; rollback data can be altered on a rooted/compromised device; offline-license grace periods need an independent signed entitlement policy; and GitHub/CDN availability, traffic limits, and provider terms must be reviewed before broad commercial distribution.
