@@ -1,0 +1,6 @@
+{
+  "service": "notes-pro-endpoint-migration-pilot",
+  "status": "ok",
+  "environment": "github-static-test",
+  "message": "This is a harmless reachability target. It is NOT a license verifier."
+}
